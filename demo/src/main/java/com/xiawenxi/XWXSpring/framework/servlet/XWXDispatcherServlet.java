@@ -1,6 +1,8 @@
 package com.xiawenxi.XWXSpring.framework.servlet;
 
+import com.xiawenxi.XWXSpring.framework.annotation.XWXAutowired;
 import com.xiawenxi.XWXSpring.framework.annotation.XWXController;
+import com.xiawenxi.XWXSpring.framework.annotation.XWXRequestMapping;
 import com.xiawenxi.XWXSpring.framework.annotation.XWXService;
 
 import javax.servlet.ServletConfig;
@@ -11,6 +13,8 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
 
@@ -20,6 +24,8 @@ public class XWXDispatcherServlet extends HttpServlet {
     private Properties contextConfig = new Properties();
     private List<String> classNames = new ArrayList();
     private Map<String, Object> ioc = new HashMap();
+    private Map<String, Method> handlerMapping = new HashMap<>();
+    private transient List<Class<?>> classList = new ArrayList<>();
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -29,7 +35,17 @@ public class XWXDispatcherServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         System.out.println("doPost(HttpServletRequest req, HttpServletResponse resp)");
-        super.doPost(req, resp);
+        resp.setCharacterEncoding("UTF-8");
+        resp.setHeader("Content-Type", "application/json; charset=UTF-8");
+//        System.out.println(req.getContextPath());
+        System.out.println(req.getRequestURI());
+        Map<String, String[]> parametrMap =  req.getParameterMap();
+        for (Map.Entry<String,String[]> entry:parametrMap.entrySet()){
+            System.out.println(entry.getKey() + " --> " + Arrays.asList(entry.getValue()));
+        }
+//        req.getReader().
+        resp.getWriter().println("夏文熙");
+//        super.doPost(req, resp);
     }
 
     @Override
@@ -75,6 +91,31 @@ public class XWXDispatcherServlet extends HttpServlet {
     }
 
     private void doHandlerMapping() {
+        if (ioc.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, Object> team : ioc.entrySet()) {
+            Class<?> calzz = team.getValue().getClass();
+            if (!calzz.isAnnotationPresent(XWXController.class)) {
+                continue;
+            }
+            String basePath = "";
+            if (calzz.isAnnotationPresent(XWXRequestMapping.class)) {
+                XWXRequestMapping mapping = calzz.getAnnotation(XWXRequestMapping.class);
+                basePath += mapping.value().trim();
+            }
+            Method[] methods = calzz.getDeclaredMethods();
+            for (Method method : methods) {
+                if (!method.isAnnotationPresent(XWXRequestMapping.class)) {
+                    continue;
+                }
+                XWXRequestMapping mapping = method.getAnnotation(XWXRequestMapping.class);
+                String path = basePath + mapping.value();
+                path = path.replaceAll("/+", "/").replaceAll("\\s+", "");
+                handlerMapping.put(path, method);
+            }
+        }
+
     }
 
     /**
@@ -118,9 +159,11 @@ public class XWXDispatcherServlet extends HttpServlet {
 
     public static void main(String[] args) {
         Map<String, String> map = new HashMap<>();
-        map.put("aa", "bbb");
-        map.put("aa", "ccc");
-        System.out.println(map.get("aa"));
+//        map.put("aa", "bbb");
+//        map.put("aa", "ccc");
+        System.out.println(map.getClass());
+        System.out.println(map.getClass());
+        System.out.println(map.getClass());
     }
 
     private String toLowerFirstCase(String simpleName) {
@@ -136,7 +179,39 @@ public class XWXDispatcherServlet extends HttpServlet {
         if (ioc.isEmpty()) {
             return;
         }
+        for (Map.Entry<String, Object> temp : ioc.entrySet()) {
+            Class<?> clazz = temp.getValue().getClass();
+            if (classList.contains(clazz)) {
+                continue;
+            }
 
+            Field[] fields = clazz.getDeclaredFields();
+            for (Field field : fields) {
+                if (!field.isAnnotationPresent(XWXAutowired.class)) {
+                    continue;
+                }
+                XWXAutowired autowired = field.getAnnotation(XWXAutowired.class);
+                String beanName = autowired.value().trim();
+                if ("".equals(beanName)) {
+                    beanName = field.getName();
+                }
+                field.setAccessible(true);
+                Object bean = ioc.get(beanName);
+                try {
+                    if (bean != null) {
+                        field.set(temp.getValue(), bean);
+                        field.setAccessible(false);
+                        continue;
+                    }
+                    bean = ioc.get(toLowerFirstCase(field.getType().getSimpleName()));
+                    field.set(temp.getValue(), bean);
+                    field.setAccessible(false);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        classList.clear();
 
     }
 

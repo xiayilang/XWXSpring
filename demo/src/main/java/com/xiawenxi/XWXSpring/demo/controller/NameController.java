@@ -10,7 +10,7 @@ public class NameController {
     @XWXAutowired
     private INameService nameService;
 
-    @XWXRequestMapping("/getByCode")
+    @XWXRequestMapping("///getByCode  ")
     public String getByCode(String code) {
         return "My name is " + code;
     }
